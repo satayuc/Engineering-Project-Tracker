@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Engineering Tracker V1.6 (Simple Status & Compare Backup)</title>
+    
+    <!-- ฟอนต์ Sarabun -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Libraries -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css">
+    
+    <!-- Database -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/localforage/1.10.0/localforage.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/frappe-gantt/0.6.1/frappe-gantt.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/frappe-gantt/0.6.1/frappe-gantt.min.js"></script>
+
+    <style>
+        /* =========================================
+           สไตล์หน้าจอหลัก (UI)
+           ========================================= */
+        body { font-family: 'Sarabun', sans-serif; background-color: #f4f6f9; margin: 0; padding: 0; }
+        #app-container { display: block; }
+        .header-brand { background-color: #1F4E79; color: white; padding: 20px 25px; border-radius: 8px; margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .card { box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: none; margin-bottom: 20px; border-radius: 8px; }
+        
+        .status-badge { padding: 6px 12px; border-radius: 4px; font-size: 0.85em; font-weight: bold; display: inline-block; text-align: center;}
+        .status-badge.completed { background-color: #eafaf1; color: #27ae60; border: 1px solid #27ae60;}
+        .status-badge.wip { background-color: #fdf2e9; color: #d35400; border: 1px solid #d35400;}
+        .status-badge.issue { background-color: #fadbd8; color: #c0392b; border: 1px solid #c0392b;}
+        
+        table.app-table th { background-color: #ecf0f1 !important; color: #2c3e50; font-size: 0.95em; font-weight: bold; }
+        table.app-table td { font-size: 0.9em; vertical-align: middle; word-wrap: break-word; }
+        
+        .img-gallery { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+        .thumbnail-container { width: 90px; height: 65px; overflow: hidden; border-radius: 6px; border: 1px solid #bdc3c7; background-color: #fff; display: flex; align-items: center; justify-content: center; position: relative;}
+        .thumbnail-img { width: 100%; height: 100%; object-fit: cover; cursor: pointer; transition: transform 0.2s;}
+        .thumbnail-img:hover { transform: scale(1.1); }
+        .thumbnail-more { position: absolute; inset: 0; background: rgba(0,0,0,0.6); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 0.9em; cursor: pointer; pointer-events: none;}
+        
+        #imagePreviewContainer { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 8px; }
+        .preview-box { width: 70px; height: 70px; border-radius: 4px; border: 1px solid #ddd; position: relative; overflow: hidden; }
+        .preview-box img { width: 100%; height: 100%; object-fit: cover; }
+        .btn-remove-img { position: absolute; top: 2px; right: 2px; border-radius: 50%; padding: 0px 4px; font-size: 0.7em; }
+        
+        .edit-mode-highlight { border: 2px solid #1F4E79 !important; box-shadow: 0 0 15px rgba(31,78,121,0.2) !important; }
+
+        .gantt-container { overflow-x: auto; padding: 10px 0; }
+        .gantt .bar-label { font-family: 'Sarabun', sans-serif !important; font-size: 13px; font-weight: bold; fill: #fff; }
+        .gantt .bar-progress { fill: rgba(0,0,0,0.2); }
+        .gantt-wip .bar { fill: #f39c12; }
+        .gantt-done .bar { fill: #27ae60; }
+        .gantt-issue .bar { fill: #c0392b; }
+
+        /* =========================================
+           สไตล์สำหรับ Marker Pin (ปักหมุด)
+           ========================================= */
+        .img-marker-wrapper { position: relative; display: inline-block; cursor: crosshair; }
+        .marker-pin {
+            position: absolute; width: 22px; height: 22px; color: white; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;
+            transform: translate(-50%, -50%); cursor: pointer; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.4);
+            transition: transform 0.1s;
+        }
+        .marker-pin:hover { transform: translate(-50%, -50%) scale(1.2); }
+        .marker-pin-a { background-color: #e67e22; border: 1px solid #fff; }
+        .marker-pin-b { background-color: #27ae60; border: 1px solid #fff; }
+
+        /* =========================================
+           สไตล์สำหรับ PDF ทุกโหมด
+           ========================================= */
+        #pdf-report-container, #pdf-presentation-container, #pdf-compare-container { display: none; }
+        
+        .pdf-header { border-bottom: 3px solid #1F4E79; padding-bottom: 12px; margin-bottom: 20px; }
+        .pdf-header h1 { color: #1F4E79; font-size: 24pt; margin: 0 0 5px 0; font-weight: bold; text-transform: uppercase; }
+        .pdf-header p { margin: 0; color: #7f8c8d; font-size: 13pt; font-weight: bold; }
+        .pdf-meta { width: 100%; margin-bottom: 20px; font-size: 11pt; color: #2c3e50;}
+        .pdf-meta td { padding: 8px 4px; vertical-align: top; border-bottom: 1px solid #f0f0f0; }
+        .pdf-meta-label { font-weight: bold; width: 150px; color: #555; }
+        .pdf-exec-summary { margin-top: 30px; margin-bottom: 25px; padding: 15px; background-color: #ffffff; border: 1px solid #e0e0e0; border-left: 5px solid #e67e22; border-radius: 4px; page-break-inside: avoid; break-inside: avoid;}
+        .pdf-exec-summary h4 { margin: 0 0 8px 0; color: #e67e22; font-size: 13pt; font-weight: bold; }
+        .pdf-exec-summary p { margin: 0; font-size: 11pt; white-space: pre-wrap; color: #2c3e50; }
+        .pdf-table { width: 100%; border-collapse: collapse; margin-bottom: 30px; table-layout: fixed; color: #2c3e50;}
+        .pdf-table th, .pdf-table td { border: 1px solid #bdc3c7; padding: 15px; vertical-align: top; word-wrap: break-word; }
+        .pdf-table th { background-color: #ecf0f1 !important; color: #2c3e50; font-weight: bold; text-align: left; font-size: 11pt; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .pdf-table tr { page-break-inside: avoid; break-inside: avoid; }
+        
+        .pdf-status-issue { color: #c0392b; font-weight: bold; border: 1px solid #c0392b; padding: 4px 8px; border-radius: 4px; background-color: #fadbd8; display: inline-block; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
+        .pdf-status-done { color: #27ae60; font-weight: bold; border: 1px solid #27ae60; padding: 4px 8px; border-radius: 4px; background-color: #eafaf1; display: inline-block; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
+        .pdf-status-wip { color: #d35400; font-weight: bold; border: 1px solid #d35400; padding: 4px 8px; border-radius: 4px; background-color: #fdf2e9; display: inline-block; -webkit-print-color-adjust: exact; print-color-adjust: exact;}
+
+        .present-slide {
+            width: 100%; height: 100vh; box-sizing: border-box; padding: 80px 40px 40px 40px; 
+            page-break-after: always; break-after: page;
+            background-image: url('bg_template.jpg'); background-size: 100% 100%; background-position: center; background-repeat: no-repeat; color: #2c3e50;
+        }
+        .present-slide:last-child { page-break-after: auto; break-after: auto; }
+
+        @media print {
+            body { background-color: white; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+            body.print-report #app-container, body.print-presentation #app-container, body.print-compare #app-container { display: none !important; }
+            
+            body.print-report #pdf-report-container { display: block !important; width: 100%; }
+            body.print-presentation #pdf-presentation-container { display: block !important; width: 100%; }
+            body.print-compare #pdf-compare-container { display: block !important; width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Containers สำหรับ Print (ซ่อนไว้เสมอ) -->
+<div id="pdf-report-container"></div>
+<div id="pdf-presentation-container"></div>
+<div id="pdf-compare-container"></div>
+
+<!-- Container UI หน้าจอหลัก -->
+<div class="container-fluid py-4" id="app-container">
+    <div class="header-brand d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h1 class="h3 mb-1"><i class="bi bi-file-earmark-bar-graph"></i> Engineering Project Tracker</h1>
+            <small class="text-light opacity-75">Interactive Gantt | Multi-View Compare | Build by Satayu. | Version 1.6</small>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary fw-bold" onclick="openCompareTool()"><i class="bi bi-layout-split"></i> Compare Tool (เปรียบเทียบ)</button>
+            <button class="btn btn-success fw-bold" onclick="exportCSV()"><i class="bi bi-file-earmark-excel-fill"></i> CSV</button>
+            <button class="btn btn-danger fw-bold" onclick="triggerReportPrint()"><i class="bi bi-file-earmark-pdf-fill"></i> Report (แนวตั้ง)</button>
+            <button class="btn btn-warning fw-bold text-dark" onclick="triggerPresentationPrint()"><i class="bi bi-easel-fill"></i> Presentation (แนวนอน)</button>
+            
+            <div class="dropdown">
+                <button class="btn btn-outline-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-gear"></i> Data Options
+                </button>
+                <ul class="dropdown-menu dropdown-menu-end">
+                    <li><a class="dropdown-item" href="#" onclick="saveToDevice()"><i class="bi bi-cloud-download text-primary"></i> Backup DB</a></li>
+                    <li><a class="dropdown-item" href="#" onclick="document.getElementById('inpImportJson').click()"><i class="bi bi-cloud-upload text-info"></i> Restore DB</a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item text-danger fw-bold" href="#" onclick="resetAllData()"><i class="bi bi-trash3-fill"></i> ล้างข้อมูลทั้งหมด (Reset)</a></li>
+                </ul>
+            </div>
+            <input type="file" id="inpImportJson" accept=".json" style="display: none;" onchange="importData(event)">
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- ฝั่งซ้าย: ตารางและกราฟ -->
+        <div class="col-lg-8">
+            <div class="card p-3 mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <h6 class="text-secondary fw-bold mb-0"><i class="bi bi-bar-chart-steps"></i> แผนงานและกำหนดการ (Project Schedule)</h6>
+                    <div class="d-flex align-items-center gap-2">
+                        <label class="small fw-bold text-muted mb-0">Project Filter:</label>
+                        <select class="form-select form-select-sm w-auto fw-bold text-primary border-primary" id="filterProject" onchange="renderTable()">
+                            <option value="ALL">รวมทุกโปรเจกต์ (All Projects)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="gantt-container" id="ganttWrapper">
+                    <svg id="gantt"></svg>
+                    <div id="ganttEmpty" class="text-center text-muted py-4 d-none">ไม่มีข้อมูลวันที่ หรือไม่พบโปรเจกต์ที่เลือก</div>
+                </div>
+            </div>
+
+            <div class="card p-3">
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped table-bordered app-table" id="trackerTable">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%; text-align: center;">รูปภาพ (Images)</th>
+                                <th style="width: 30%;">Part No. / รหัส - ชื่อชิ้นงาน</th>
+                                <th>รายละเอียด & ระยะเวลา</th>
+                                <th style="width: 15%; text-align: center;">สถานะ (Status)</th>
+                                <th class="text-center btn-action" style="width: 110px;">จัดการ (Action)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <tr><td colspan="5" class="text-center text-muted py-4">กำลังโหลดข้อมูล...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- ฝั่งขวา: ฟอร์มกรอกข้อมูล -->
+        <div class="col-lg-4">
+            <div class="card p-3 mb-3" id="settingsCard" style="border-top: 4px solid #1F4E79;">
+                <h6 class="fw-bold mb-3" style="color: #1F4E79;"><i class="bi bi-gear-fill"></i> ข้อมูลรายงาน (Report Settings)</h6>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">แผนก (Department)</label>
+                    <input type="text" class="form-control form-control-sm border-secondary" id="inpDepartment" placeholder="เช่น Design Engineering">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label small fw-bold">สรุปภาพรวม (Executive Summary)</label>
+                    <textarea class="form-control form-control-sm border-secondary" id="inpExecSummary" rows="3" placeholder="สรุปสถานะสั้นๆ สำหรับผู้บริหาร..."></textarea>
+                </div>
+                <div class="mb-1">
+                    <label class="form-label small fw-bold">ชื่อผู้จัดทำ (Prepared By)</label>
+                    <input type="text" class="form-control form-control-sm border-secondary" id="inpPreparer" placeholder="ชื่อวิศวกรผู้ออกแบบ">
+                </div>
+            </div>
+
+            <div class="card p-3 sticky-top" style="top: 20px; border-top: 4px solid #27ae60;" id="formCard">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0 fw-bold" style="color: #27ae60;" id="formTitle"><i class="bi bi-plus-circle-fill"></i> เพิ่มชิ้นส่วนใหม่</h5>
+                    <button class="btn btn-sm btn-outline-secondary d-none" id="btnCancelEdit" onclick="cancelEditMode()">ยกเลิก</button>
+                </div>
+                
+                <form id="addForm">
+                    <input type="hidden" id="editId" value="">
+                    
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-primary">อัปโหลดรูปภาพ (สูงสุด 5 รูป)</label>
+                        <input type="file" class="form-control form-control-sm" id="inpImage" accept="image/*" multiple>
+                        <div id="imagePreviewContainer"></div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold text-success">ชื่อโปรเจกต์ (Project Name)</label>
+                        <input type="text" class="form-control form-control-sm border-success fw-bold" id="inpProjectName" list="projectOptions" required>
+                        <datalist id="projectOptions"></datalist>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Part Name / ชื่อหมวดหมู่ชิ้นงาน</label>
+                        <input type="text" class="form-control form-control-sm" id="inpPartName" list="partNameOptions" required>
+                        <datalist id="partNameOptions">
+                            <option value="Bull Bar Assembly">
+                            <option value="Components">
+                            <option value="Bolt Kit & Fasteners">
+                        </datalist>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">Part No. / รหัสและชื่อชิ้นส่วน</label>
+                        <input type="text" class="form-control form-control-sm" id="inpPartNo" required>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">รายละเอียด (Design Scope)</label>
+                        <textarea class="form-control form-control-sm" id="inpScope" rows="2" required></textarea>
+                    </div>
+                    <div class="row mb-2">
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">วันที่เริ่ม (Start Date)</label>
+                            <input type="date" class="form-control form-control-sm" id="inpStartDate" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small fw-bold">กำหนดเสร็จ (Due Date)</label>
+                            <input type="date" class="form-control form-control-sm" id="inpDueDate" required>
+                        </div>
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label small fw-bold">สถานะ (Status)</label>
+                        <select class="form-select form-select-sm" id="inpStatus" required>
+                            <option value="In Progress" selected>In Progress</option>
+                            <option value="Technical Issue">Technical Issue</option>
+                            <option value="Completed">Completed</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label small fw-bold text-danger">ปัญหาที่พบ (Blockers)</label>
+                        <input type="text" class="form-control form-control-sm" id="inpIssue" placeholder="ใส่ - หากไม่มีปัญหา">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-success w-100 fw-bold" id="btnSubmit"><i class="bi bi-save2"></i> บันทึกข้อมูล</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal สำหรับแสดงรูปขยายใหญ่ -->
+<div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-xl">
+    <div class="modal-content border-0 bg-transparent">
+      <div class="modal-header border-0 pb-0">
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-0 text-center">
+        <img src="" id="modalImage" style="max-width: 100%; max-height: 85vh; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.8);">
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal สำหรับเครื่องมือเปรียบเทียบชิ้นงาน (Multi-View Compare Tool) -->
+<div class="modal fade" id="compareModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl">
+    <div class="modal-content">
+      <div class="modal-header bg-primary text-white">
+        <h5 class="modal-title fw-bold"><i class="bi bi-layout-split"></i> เครื่องมือเปรียบเทียบชิ้นงาน (Multi-View Comparison Tool)</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body bg-light">
+          <div class="alert alert-info py-2 small mb-3 border-info">
+              <i class="bi bi-info-circle-fill"></i> <strong>วิธีใช้งาน:</strong> สามารถเพิ่ม <strong>"มุมมองเปรียบเทียบ"</strong> ได้ไม่จำกัด เมื่ออัปโหลดรูปแล้วให้ <strong>คลิกบนรูปภาพ</strong> เพื่อปักหมุดชี้จุดที่แตกต่าง
+          </div>
+          
+          <div class="row mb-3">
+              <div class="col-md-12">
+                  <label class="form-label fw-bold">หัวข้อหลักของสไลด์ (Main Presentation Title)</label>
+                  <input type="text" class="form-control fw-bold text-primary" id="cmpMainTitle" placeholder="เช่น Design Revision 01 vs Revision 02" oninput="saveCompareLocal()">
+              </div>
+          </div>
+          
+          <!-- Container บรรจุมุมมองต่างๆ -->
+          <div id="compareViewsContainer"></div>
+
+          <button class="btn btn-outline-primary w-100 fw-bold mt-3 border-2" onclick="addNewCompareView()">
+             <i class="bi bi-plus-circle-fill"></i> เพิ่มมุมมองเปรียบเทียบ (Add View)
+          </button>
+      </div>
+      <!-- ปุ่ม Backup/Load Compare Data -->
+      <div class="modal-footer d-flex justify-content-between bg-light">
+        <div>
+            <input type="file" id="inpImportCompare" accept=".json" style="display: none;" onchange="importCompareData(event)">
+            <button type="button" class="btn btn-outline-success btn-sm" onclick="backupCompare()"><i class="bi bi-download"></i> Save Backup</button>
+            <button type="button" class="btn btn-outline-info btn-sm text-dark" onclick="document.getElementById('inpImportCompare').click()"><i class="bi bi-upload"></i> Load Backup</button>
+        </div>
+        <div>
+            <button type="button" class="btn btn-danger" onclick="clearAllCompareViews()"><i class="bi bi-trash"></i> ล้างข้อมูล Compare</button>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ปิด</button>
+            <button type="button" class="btn btn-warning fw-bold text-dark" onclick="triggerComparePrint()"><i class="bi bi-easel-fill"></i> Save Compare PDF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    let db = [];
+    let currentImages = []; 
+    let ganttChart = null;
+
+    localforage.config({ name: 'EngineeringTracker', storeName: 'project_db' });
+
+    window.onload = async () => {
+        try {
+            // โหลดข้อมูลโปรเจกต์ (ไม่มีการผูก Log)
+            const stored = await localforage.getItem('project_data');
+            if (stored) { db = stored; }
+            
+            // โหลดตั้งค่า Report
+            const savedSettings = await localforage.getItem('report_settings');
+            if (savedSettings) {
+                document.getElementById('inpPreparer').value = savedSettings.preparer || '';
+                document.getElementById('inpDepartment').value = savedSettings.department || '';
+                document.getElementById('inpExecSummary').value = savedSettings.execSummary || '';
+            }
+
+            // โหลดข้อมูล Compare Tool อัตโนมัติ (Auto-Load)
+            const savedCmp = await localforage.getItem('compare_data');
+            if (savedCmp && savedCmp.length > 0) cmpViews = savedCmp;
+            const savedCmpTitle = await localforage.getItem('compare_title');
+            if (savedCmpTitle) document.getElementById('cmpMainTitle').value = savedCmpTitle;
+
+            updateProjectDropdowns();
+            renderTable();
+        } catch (err) { console.error("Load Error:", err); }
+    };
+
+    async function resetAllData() {
+        if(confirm('⚠️ คำเตือน!\nคุณกำลังจะลบข้อมูล "ทุกโปรเจกต์" ทั้งหมดออกจากระบบ\n\n(แนะนำให้กด Backup DB เก็บไว้ก่อน)\nคุณแน่ใจหรือไม่ว่าต้องการล้างข้อมูล?')) {
+            db = [];
+            await localforage.setItem('project_data', []);
+            updateProjectDropdowns();
+            renderTable();
+            cancelEditMode();
+            alert('ล้างข้อมูลระบบเรียบร้อยแล้ว');
+        }
+    }
+
+    async function saveReportSettings() {
+        const preparer = document.getElementById('inpPreparer').value;
+        const department = document.getElementById('inpDepartment').value;
+        const execSummary = document.getElementById('inpExecSummary').value;
+        await localforage.setItem('report_settings', { preparer, department, execSummary });
+    }
+    document.getElementById('inpPreparer').addEventListener('input', saveReportSettings);
+    document.getElementById('inpDepartment').addEventListener('input', saveReportSettings);
+    document.getElementById('inpExecSummary').addEventListener('input', saveReportSettings);
+
+    async function saveData() {
+        try {
+            await localforage.setItem('project_data', db);
+            updateProjectDropdowns();
+        } catch (err) { alert('พื้นที่จัดเก็บใกล้เต็มครับ'); }
+    }
+
+    async function toggleShowPdf(id, isChecked) {
+        const index = db.findIndex(x => x.id === id);
+        if (index !== -1) {
+            db[index].showInPdf = isChecked;
+            await saveData();
+        }
+    }
+
+    function updateProjectDropdowns() {
+        const projects = [...new Set(db.map(x => x.projectName || x.category))].filter(Boolean).sort();
+        const datalist = document.getElementById('projectOptions');
+        datalist.innerHTML = '';
+        projects.forEach(p => { datalist.innerHTML += `<option value="${p}">`; });
+
+        const filter = document.getElementById('filterProject');
+        const currentVal = filter.value;
+        filter.innerHTML = '<option value="ALL">รวมทุกโปรเจกต์ (All Projects)</option>';
+        projects.forEach(p => {
+            const selected = p === currentVal ? 'selected' : '';
+            filter.innerHTML += `<option value="${p}" ${selected}>${p}</option>`;
+        });
+        if (currentVal !== 'ALL' && !projects.includes(currentVal)) filter.value = 'ALL';
+    }
+
+    document.getElementById('inpImage').addEventListener('change', async function(e) {
+        const files = Array.from(e.target.files);
+        if (currentImages.length + files.length > 5) { alert('อัปโหลดรูปภาพได้สูงสุด 5 รูป'); this.value = ''; return; }
+
+        const btnSubmit = document.getElementById('btnSubmit');
+        btnSubmit.disabled = true; btnSubmit.innerHTML = 'กำลังบีบอัดรูปภาพ...';
+
+        for(let file of files) {
+            let base64 = await compressImage(file);
+            currentImages.push(base64);
+        }
+        renderImagePreviews();
+        btnSubmit.disabled = false;
+        btnSubmit.innerHTML = document.getElementById('editId').value ? '<i class="bi bi-save2"></i> อัปเดตข้อมูล' : '<i class="bi bi-save2"></i> บันทึกข้อมูล';
+        this.value = ''; 
+    });
+
+    function compressImage(file) {
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    const MAX_WIDTH = 1200; 
+                    let width = img.width; let height = img.height;
+                    if (width > MAX_WIDTH) { height = Math.round((height *= MAX_WIDTH / width)); width = MAX_WIDTH; }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.85));
+                }
+                img.src = event.target.result;
+            }
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function renderImagePreviews() {
+        const container = document.getElementById('imagePreviewContainer');
+        container.innerHTML = '';
+        currentImages.forEach((imgSrc, index) => {
+            container.innerHTML += `<div class="preview-box"><img src="${imgSrc}"><button type="button" class="btn btn-danger btn-remove-img" onclick="removeSingleImage(${index})"><i class="bi bi-x"></i></button></div>`;
+        });
+    }
+
+    function removeSingleImage(index) { currentImages.splice(index, 1); renderImagePreviews(); }
+    function clearImages() { currentImages = []; renderImagePreviews(); document.getElementById('inpImage').value = ''; }
+    
+    function showFullImage(base64Image) {
+        document.getElementById('modalImage').src = base64Image;
+        const modalEl = document.getElementById('imageModal');
+        const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        
+        const selectedProject = document.getElementById('filterProject').value;
+        let viewDb = selectedProject === 'ALL' ? db : db.filter(x => (x.projectName || x.category) === selectedProject);
+
+        if (viewDb.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-muted py-5">ยังไม่มีข้อมูลในโปรเจกต์นี้</td></tr>`;
+            document.getElementById('ganttWrapper').innerHTML = '<div id="ganttEmpty" class="text-center text-muted py-4">ไม่มีข้อมูลวันที่ หรือไม่พบโปรเจกต์ที่เลือก</div>';
+            return;
+        }
+
+        const sortedDb = [...viewDb].sort((a,b) => (a.partName || "").localeCompare(b.partName || ""));
+
+        sortedDb.forEach(item => {
+            let statusClass = 'status-badge';
+            if (item.status.includes('Completed')) statusClass += ' completed';
+            else if (item.status.includes('Issue')) statusClass += ' issue';
+            else statusClass += ' wip';
+
+            // นำระบบ Issue HTML กลับมาแทน Progress Log
+            const issueHtml = (item.issue && item.issue !== '-') ? 
+                `<div class="mt-2 p-2 rounded" style="background-color:#fadbd8; border-left: 4px solid #c0392b;">
+                    <small class="fw-bold text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Blocker:</small><br>
+                    <small class="text-danger">${item.issue}</small>
+                </div>` : '';
+
+            let imageCellHtml = '<div style="color:#bdc3c7; padding:10px;">No Image</div>';
+            if (item.images && item.images.length > 0) {
+                imageCellHtml = '<div class="img-gallery">';
+                item.images.slice(0, 4).forEach((img, idx) => {
+                    if (idx === 3 && item.images.length > 4) {
+                        imageCellHtml += `<div class="thumbnail-container"><img src="${img}" class="thumbnail-img" onclick="showFullImage('${img}')"><div class="thumbnail-more">+${item.images.length - 3}</div></div>`;
+                    } else {
+                        imageCellHtml += `<div class="thumbnail-container"><img src="${img}" class="thumbnail-img" onclick="showFullImage('${img}')"></div>`;
+                    }
+                });
+                imageCellHtml += '</div>';
+            }
+
+            const sd = item.startDate || new Date().toISOString().slice(0,10);
+            const dd = item.dueDate || new Date().toISOString().slice(0,10);
+            const formatDt = (d) => { const dt = new Date(d); return !isNaN(dt) ? dt.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'numeric'}) : '-'; };
+
+            let projectBadge = selectedProject === 'ALL' && (item.projectName||item.category) ? `<br><span class="badge bg-secondary mt-1">${item.projectName||item.category}</span>` : '';
+            const isShowChecked = item.showInPdf !== false ? 'checked' : '';
+
+            const tr = document.createElement('tr');
+            if(document.getElementById('editId').value == item.id) tr.classList.add('table-primary');
+
+            tr.innerHTML = `
+                <td align="center" style="vertical-align: top;">${imageCellHtml}</td>
+                <td style="vertical-align: top;">
+                    <strong style="color: #1F4E79; font-size: 1.1em;">${item.partNo || item.name || '-'}</strong><br>
+                    <small class="text-muted"><i class="bi bi-tag-fill"></i> ${item.partName || item.category || '-'}</small>
+                    ${projectBadge}
+                </td>
+                <td style="vertical-align: top;">
+                    ${item.scope}
+                    <div class="mt-2 small text-secondary fw-bold">
+                        <i class="bi bi-calendar2-plus"></i> เริ่ม: ${formatDt(sd)} <br>
+                        <i class="bi bi-calendar2-check"></i> เสร็จ: <span class="text-danger">${formatDt(dd)}</span>
+                    </div>
+                    ${issueHtml}
+                </td>
+                <td align="center" style="vertical-align: top;"><span class="${statusClass}">${item.status}</span></td>
+                <td align="center" class="btn-action" style="vertical-align: top;">
+                    <div class="d-flex flex-column gap-1">
+                        <button class="btn btn-sm btn-outline-primary w-100" onclick="editItem(${item.id})"><i class="bi bi-pencil-square"></i> แก้ไข</button>
+                        <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteItem(${item.id})"><i class="bi bi-trash3"></i> ลบ</button>
+                        
+                        <div class="form-check form-switch mt-2 d-flex justify-content-center align-items-center flex-column">
+                            <input class="form-check-input ms-0 mb-1" type="checkbox" role="switch" id="showPdf_${item.id}" ${isShowChecked} onchange="toggleShowPdf(${item.id}, this.checked)" style="cursor:pointer;">
+                            <label class="form-check-label small fw-bold" for="showPdf_${item.id}" style="font-size:0.75rem; cursor:pointer;">ลง PDF</label>
+                        </div>
+                    </div>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        drawGanttChart(viewDb);
+    }
+
+    function drawGanttChart(viewDb) {
+        document.getElementById('ganttWrapper').innerHTML = '<svg id="gantt"></svg><div id="ganttEmpty" class="text-center text-muted py-4 d-none">ไม่มีข้อมูลวันที่ หรือไม่พบโปรเจกต์ที่เลือก</div>';
+        let validTasks = viewDb.filter(x => x.startDate && x.dueDate && (new Date(x.startDate) <= new Date(x.dueDate)))
+                           .sort((a,b) => new Date(a.startDate) - new Date(b.startDate));
+        if (validTasks.length === 0) {
+            document.getElementById('gantt').style.display = 'none';
+            document.getElementById('ganttEmpty').classList.remove('d-none');
+            return;
+        }
+
+        const tasks = validTasks.map((item, idx) => {
+            let pClass = 'gantt-wip';
+            let progress = 50;
+            if(item.status.includes('Completed')) { pClass = 'gantt-done'; progress = 100; }
+            if(item.status.includes('Issue')) { pClass = 'gantt-issue'; progress = 30; }
+
+            const labelName = document.getElementById('filterProject').value === 'ALL' ? `[${item.projectName||item.category||''}] ${item.partNo||item.name||'-'}` : item.partNo||item.name||'-';
+
+            return { id: item.id.toString(), name: labelName, start: item.startDate, end: item.dueDate, progress: progress, custom_class: pClass };
+        });
+
+        ganttChart = new Gantt("#gantt", tasks, {
+            header_height: 40, column_width: 30, step: 24, view_modes: ['Quarter Day', 'Half Day', 'Day', 'Week', 'Month'],
+            view_mode: 'Day', date_format: 'YYYY-MM-DD', custom_popup_html: null
+        });
+    }
+
+    function editItem(id) {
+        const item = db.find(x => x.id === id);
+        if (!item) return;
+
+        document.getElementById('editId').value = item.id;
+        document.getElementById('inpProjectName').value = item.projectName || item.category || '';
+        document.getElementById('inpPartName').value = item.partName || item.category || '';
+        document.getElementById('inpPartNo').value = item.partNo || item.name || '';
+        document.getElementById('inpScope').value = item.scope;
+        document.getElementById('inpStartDate').value = item.startDate || '';
+        document.getElementById('inpDueDate').value = item.dueDate || '';
+        document.getElementById('inpStatus').value = item.status || 'In Progress';
+        document.getElementById('inpIssue').value = item.issue === '-' ? '' : (item.issue || '');
+
+        currentImages = item.images ? [...item.images] : [];
+        renderImagePreviews();
+
+        document.getElementById('formTitle').innerHTML = '<i class="bi bi-pencil-square"></i> กำลังแก้ไข...';
+        document.getElementById('formTitle').style.color = '#1F4E79';
+        document.getElementById('btnSubmit').innerHTML = '<i class="bi bi-save2"></i> อัปเดตข้อมูล';
+        document.getElementById('btnSubmit').className = 'btn btn-primary w-100 fw-bold';
+        document.getElementById('btnCancelEdit').classList.remove('d-none');
+        document.getElementById('formCard').classList.add('edit-mode-highlight');
+        
+        renderTable(); 
+        window.scrollTo(0, 0);
+    }
+
+    function cancelEditMode() {
+        document.getElementById('addForm').reset();
+        document.getElementById('editId').value = '';
+        
+        const currentFilter = document.getElementById('filterProject').value;
+        if(currentFilter !== 'ALL') document.getElementById('inpProjectName').value = currentFilter;
+
+        clearImages();
+        document.getElementById('formTitle').innerHTML = '<i class="bi bi-plus-circle-fill"></i> เพิ่มชิ้นส่วนใหม่';
+        document.getElementById('formTitle').style.color = '#27ae60';
+        document.getElementById('btnSubmit').innerHTML = '<i class="bi bi-save2"></i> บันทึกข้อมูล';
+        document.getElementById('btnSubmit').className = 'btn btn-success w-100 fw-bold';
+        document.getElementById('btnCancelEdit').classList.add('d-none');
+        document.getElementById('formCard').classList.remove('edit-mode-highlight');
+        renderTable();
+    }
+
+    document.getElementById('addForm').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        const stDate = new Date(document.getElementById('inpStartDate').value);
+        const enDate = new Date(document.getElementById('inpDueDate').value);
+        if (stDate > enDate) { alert("วันที่เริ่มงาน ต้องมาก่อนหรือเท่ากับกำหนดเสร็จครับ"); return; }
+
+        const editId = document.getElementById('editId').value;
+        const existingItem = editId ? db.find(x => x.id == editId) : null;
+        const currentShowInPdf = existingItem && existingItem.showInPdf !== undefined ? existingItem.showInPdf : true;
+
+        const formData = {
+            projectName: document.getElementById('inpProjectName').value.trim(),
+            partName: document.getElementById('inpPartName').value,
+            partNo: document.getElementById('inpPartNo').value,
+            scope: document.getElementById('inpScope').value,
+            startDate: document.getElementById('inpStartDate').value,
+            dueDate: document.getElementById('inpDueDate').value,
+            status: document.getElementById('inpStatus').value,
+            issue: document.getElementById('inpIssue').value || '-',
+            images: [...currentImages],
+            showInPdf: currentShowInPdf 
+        };
+
+        if (editId) {
+            const index = db.findIndex(x => x.id == editId);
+            if (index !== -1) db[index] = { ...db[index], ...formData };
+            cancelEditMode();
+        } else {
+            db.push({ id: Date.now(), ...formData });
+            document.getElementById('addForm').reset();
+            clearImages();
+            document.getElementById('inpProjectName').value = formData.projectName;
+        }
+        await saveData();
+        renderTable();
+    });
+
+    async function deleteItem(id) {
+        if(confirm('ลบข้อมูลชุดนี้ (รูปภาพที่แนบจะถูกลบทั้งหมด)?')) {
+            db = db.filter(x => x.id !== id);
+            if (document.getElementById('editId').value == id) cancelEditMode();
+            await saveData();
+            renderTable();
+        }
+    }
+
+    function exportCSV() {
+        const selectedProject = document.getElementById('filterProject').value;
+        let viewDb = selectedProject === 'ALL' ? db : db.filter(x => (x.projectName || x.category) === selectedProject);
+
+        if(viewDb.length === 0) { alert("ไม่มีข้อมูลในโปรเจกต์นี้"); return; }
+        
+        let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+        csvContent += "Project Name,Part Name,Part No.,Scope,Start Date,Due Date,Status,Issues,Show In PDF,Images Attached\r\n";
+        
+        const sortedDb = [...viewDb].sort((a,b) => (a.partName||"").localeCompare(b.partName||""));
+
+        sortedDb.forEach(row => {
+            let pProj = `"${row.projectName || row.category || '-'}"`;
+            let pName = `"${row.partName || row.category || '-'}"`;
+            let pNo = `"${row.partNo || row.name || '-'}"`;
+            let scope = `"${(row.scope || '').replace(/"/g, '""').replace(/\n/g, " ")}"`;
+            let sd = `"${row.startDate || '-'}"`;
+            let dd = `"${row.dueDate || '-'}"`;
+            let status = `"${row.status}"`;
+            let issue = `"${(row.issue || '').replace(/"/g, '""').replace(/\n/g, " ")}"`;
+            let isShow = `"${row.showInPdf !== false ? 'Yes' : 'No'}"`;
+            let imgCount = `"${row.images ? row.images.length : 0} Images"`;
+            
+            csvContent += `${pProj},${pName},${pNo},${scope},${sd},${dd},${status},${issue},${isShow},${imgCount}\r\n`;
+        });
+
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", "BOM_" + (selectedProject !== 'ALL' ? selectedProject : 'All') + "_" + new Date().toISOString().slice(0,10) + ".csv");
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function saveToDevice() {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "Tracker_Backup_" + new Date().toISOString().slice(0,10) + ".json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        document.body.removeChild(downloadAnchorNode);
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                let importedData = JSON.parse(e.target.result);
+                if(Array.isArray(importedData)) {
+                    if(confirm('คำเตือน: ระบบจะนำข้อมูลที่ Backup ไว้มา "เขียนทับ" ข้อมูลปัจจุบันทั้งหมด คุณแน่ใจหรือไม่?')) {
+                        db = importedData;
+                        await saveData(); 
+                        renderTable();
+                        alert('นำเข้าข้อมูล (Restore) สำเร็จเรียบร้อยแล้ว!');
+                    }
+                } else { alert('รูปแบบไฟล์ข้อมูลไม่ถูกต้อง'); }
+            } catch(err) { alert('เกิดข้อผิดพลาด ไม่สามารถอ่านไฟล์ได้'); }
+            event.target.value = ''; 
+        };
+        reader.readAsText(file);
+    }
+
+    function setPageSize(cssText) {
+        let style = document.getElementById('dynamic-print-style');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'dynamic-print-style';
+            document.head.appendChild(style);
+        }
+        style.innerHTML = cssText;
+    }
+    window.onafterprint = function() { document.body.className = ''; };
+
+    // ==========================================
+    // Print Report (แนวตั้ง)
+    // ==========================================
+    function triggerReportPrint() {
+        const selectedProject = document.getElementById('filterProject').value;
+        let viewDb = selectedProject === 'ALL' ? db : db.filter(x => (x.projectName || x.category) === selectedProject);
+        let printDb = viewDb.filter(x => x.showInPdf !== false);
+
+        if(printDb.length === 0) { alert("กรุณาเปิดสวิตช์ 'ลง PDF' ในตารางอย่างน้อย 1 รายการ"); return; }
+
+        const reportTitle = selectedProject === 'ALL' ? 'Overall Project Summary' : selectedProject;
+        const preparerName = document.getElementById('inpPreparer').value || "Satayu (Design Engineer)";
+        const departmentName = document.getElementById('inpDepartment').value || "Design Engineering";
+        const execSummaryText = document.getElementById('inpExecSummary').value;
+        const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        let htmlStr = `
+            <div class="pdf-header">
+                <h1>DESIGN PROGRESS REPORT</h1>
+                <p>${reportTitle}</p>
+            </div>
+            <table class="pdf-meta">
+                <tr>
+                    <td class="pdf-meta-label">Project Name:</td><td>${reportTitle}</td>
+                    <td class="pdf-meta-label">Date:</td><td>${dateStr}</td>
+                </tr>
+                <tr>
+                    <td class="pdf-meta-label">Department:</td><td>${departmentName}</td>
+                    <td class="pdf-meta-label">Total Parts:</td><td>${printDb.length} Items</td>
+                </tr>
+            </table>
+            <table class="pdf-table">
+                <thead>
+                    <tr>
+                        <th style="width: 45%; text-align: center;">Design Images</th>
+                        <th style="width: 55%;">Part Details & Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        const sortedDb = [...printDb].sort((a,b) => (a.partName||"").localeCompare(b.partName||""));
+        
+        sortedDb.forEach(item => {
+            let statusColor = 'pdf-status-wip';
+            if(item.status.includes('Completed')) statusColor = 'pdf-status-done';
+            if(item.status.includes('Issue')) statusColor = 'pdf-status-issue';
+
+            const issueText = (item.issue && item.issue !== '-') ? 
+                `<div style="margin-top: 10px; background-color:#fadbd8; border-left: 4px solid #c0392b; padding: 8px; border-radius: 4px;">
+                    <strong style="color:#c0392b; font-size: 0.9em;"><i class="bi bi-exclamation-triangle-fill"></i> Blocker:</strong><br>
+                    <span style="color:#c0392b; font-size: 0.95em;">${item.issue}</span>
+                </div>` : '';
+            
+            const sd = item.startDate || new Date().toISOString().slice(0,10);
+            const dd = item.dueDate || new Date().toISOString().slice(0,10);
+            const fmtDate = (d) => { const dt = new Date(d); return !isNaN(dt) ? dt.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'numeric'}) : '-'; };
+            
+            let imgHtml = '<div style="color:#bdc3c7; padding: 50px 0; text-align: center;">No Image</div>';
+            if(item.images && item.images.length > 0) {
+                imgHtml = `<div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:center;">`;
+                item.images.forEach(img => {
+                    let w = item.images.length === 1 ? '100%' : '48%';
+                    imgHtml += `<img src="${img}" style="width: ${w}; max-height: 180px; object-fit: contain; border-radius: 4px; border: 1px solid #ddd; background: #fff; padding: 4px;">`;
+                });
+                imgHtml += `</div>`;
+            }
+
+            const projBadgePdf = selectedProject === 'ALL' && (item.projectName||item.category) ? `<span style="background-color:#ecf0f1; color:#7f8c8d; padding: 2px 6px; border-radius:4px; font-size: 0.85em; margin-left:5px;">[${item.projectName||item.category}]</span>` : '';
+
+            htmlStr += `
+                <tr>
+                    <td style="vertical-align: top; background-color: #fcfcfc;">${imgHtml}</td>
+                    <td style="vertical-align: top;">
+                        <div style="display:flex; justify-content: space-between; border-bottom: 2px solid #ecf0f1; padding-bottom: 8px; margin-bottom: 12px;">
+                            <div style="width: 70%;">
+                                <strong style="font-size: 14pt; color: #1F4E79;">${item.partNo || item.name || '-'}</strong>${projBadgePdf}<br>
+                                <span style="color:#7f8c8d; font-size: 0.95em;">Part Name: ${item.partName || item.category || '-'}</span>
+                            </div>
+                            <div style="width: 30%; text-align: right;">
+                                <span class="${statusColor}">${item.status}</span>
+                            </div>
+                        </div>
+                        <div style="color: #2c3e50; line-height: 1.6; font-size: 11pt;">
+                            <strong>Design Scope:</strong><br>
+                            ${item.scope}
+                            <div style="margin-top: 10px; font-size: 0.95em; color: #555; background: #f8f9fa; padding: 6px; border-radius: 4px;">
+                                <strong>Start:</strong> ${fmtDate(sd)} <br><strong style="color: #e67e22;">Due:</strong> ${fmtDate(dd)}
+                            </div>
+                        </div>
+                        ${issueText}
+                    </td>
+                </tr>
+            `;
+        });
+        htmlStr += `</tbody></table>`;
+        if(execSummaryText.trim() !== '') htmlStr += `<div class="pdf-exec-summary"><h4>Executive Summary</h4><p>${execSummaryText}</p></div>`;
+        htmlStr += `<div style="margin-top: 40px; text-align: right; page-break-inside: avoid; font-size: 13pt;"><strong>Prepared By:</strong> <span style="margin-left: 10px; color: #1F4E79; font-weight: bold;">${preparerName}</span></div>`;
+
+        document.getElementById('pdf-report-container').innerHTML = htmlStr;
+        document.body.className = 'print-report';
+        setPageSize('@page { size: A4 portrait; margin: 15mm; }');
+        setTimeout(() => { window.print(); }, 100);
+    }
+
+    // ==========================================
+    // Print Presentation (แนวนอน)
+    // ==========================================
+    function triggerPresentationPrint() {
+        const selectedProject = document.getElementById('filterProject').value;
+        let viewDb = selectedProject === 'ALL' ? db : db.filter(x => (x.projectName || x.category) === selectedProject);
+        let printDb = viewDb.filter(x => x.showInPdf !== false);
+
+        if(printDb.length === 0) { alert("กรุณาเปิดสวิตช์ 'ลง PDF' ในตารางอย่างน้อย 1 รายการ"); return; }
+
+        const reportTitle = selectedProject === 'ALL' ? 'Overall Project Summary' : selectedProject;
+        const preparerName = document.getElementById('inpPreparer').value || "Satayu (Design Engineer)";
+        const departmentName = document.getElementById('inpDepartment').value || "Design Engineering";
+        const execSummaryText = document.getElementById('inpExecSummary').value;
+        const dateStr = new Date().toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        let htmlStr = `
+            <div class="present-slide">
+                <div style="display:flex; flex-direction:column; justify-content:center; align-items:center; height: 100%; text-align:center;">
+                    <h1 style="color: #1F4E79; font-size: 42pt; margin-bottom: 10px; font-weight: bold;">${reportTitle}</h1>
+                    <h3 style="color: #7f8c8d; font-size: 24pt;">Design Progress Presentation</h3>
+                    <div style="margin-top: 50px; padding-top: 20px; border-top: 2px solid #ccc; min-width: 400px;">
+                        <p style="font-size: 16pt; margin: 5px 0;"><strong>Department:</strong> ${departmentName}</p>
+                        <p style="font-size: 16pt; margin: 5px 0;"><strong>Prepared By:</strong> ${preparerName}</p>
+                        <p style="font-size: 14pt; color: #777; margin-top: 20px;">${dateStr}</p>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        if(execSummaryText.trim() !== '') {
+            htmlStr += `
+                <div class="present-slide">
+                    <div style="height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                        <h2 style="color: #e67e22; font-size: 32pt; margin-bottom: 30px; border-bottom: 4px solid #e67e22; padding-bottom: 10px;">Executive Summary</h2>
+                        <p style="font-size: 18pt; line-height: 1.8; color: #2c3e50; white-space: pre-wrap;">${execSummaryText}</p>
+                    </div>
+                </div>
+            `;
+        }
+
+        const sortedDb = [...printDb].sort((a,b) => (a.partName||"").localeCompare(b.partName||""));
+        
+        sortedDb.forEach(item => {
+            let statusColor = item.status.includes('Completed') ? '#27ae60' : (item.status.includes('Issue') ? '#c0392b' : '#d35400');
+            const sd = item.startDate || new Date().toISOString().slice(0,10);
+            const dd = item.dueDate || new Date().toISOString().slice(0,10);
+            const fmtDate = (d) => { const dt = new Date(d); return !isNaN(dt) ? dt.toLocaleDateString('th-TH', {day:'2-digit', month:'short', year:'numeric'}) : '-'; };
+
+            let imgHtml = '<div style="display:flex; height:100%; align-items:center; justify-content:center; background:#eee; border-radius:8px; color:#aaa; font-size: 18pt;">No Image Available</div>';
+            if(item.images && item.images.length > 0) {
+                imgHtml = '<div style="display:grid; grid-template-columns: 1fr 1fr; gap: 10px; height: 100%; align-content: center;">';
+                item.images.slice(0,4).forEach(img => {
+                    let gridCol = item.images.length === 1 ? 'grid-column: span 2;' : '';
+                    imgHtml += `<img src="${img}" style="${gridCol} width: 100%; height: 100%; max-height: 250px; object-fit: contain; background: white; border: 1px solid #ccc; border-radius: 8px; padding: 5px;">`;
+                });
+                imgHtml += '</div>';
+            } 
+
+            htmlStr += `
+                <div class="present-slide">
+                    <div style="display:flex; gap: 40px; height: 100%;">
+                        <div style="flex: 1; height: 100%;">${imgHtml}</div>
+                        <div style="flex: 1; display:flex; flex-direction:column; justify-content: center;">
+                            <h2 style="color: #1F4E79; font-size: 26pt; margin: 0 0 5px 0;">${item.partNo || item.name || '-'}</h2>
+                            <h4 style="color: #7f8c8d; font-size: 16pt; margin: 0 0 20px 0;">${item.partName || item.category || '-'}</h4>
+                            
+                            <div style="background: #f8f9fa; border-left: 5px solid ${statusColor}; padding: 15px; margin-bottom: 20px;">
+                                <strong style="font-size: 16pt;">Status: <span style="color: ${statusColor};">${item.status}</span></strong>
+                            </div>
+                            
+                            <h5 style="color: #333; font-size: 16pt; border-bottom: 2px solid #ccc; padding-bottom: 5px;">Design Scope</h5>
+                            <p style="font-size: 14pt; line-height: 1.6; color: #444;">${item.scope}</p>
+                            
+                            <div style="margin-top: 15px; font-size: 14pt; color: #555;">
+                                <span style="margin-right: 20px;"><strong>Start:</strong> ${fmtDate(sd)}</span>
+                                <strong style="color: #e67e22;">Due:</strong> ${fmtDate(dd)}
+                            </div>
+                            
+                            ${item.issue && item.issue !== '-' ? `
+                            <div style="margin-top: 25px; background: #fadbd8; border: 1px solid #c0392b; padding: 15px; border-radius: 8px;">
+                                <h5 style="color: #c0392b; font-size: 14pt; margin: 0 0 5px 0;">Technical Issue</h5>
+                                <p style="font-size: 13pt; color: #c0392b; margin: 0;">${item.issue}</p>
+                            </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+        document.getElementById('pdf-presentation-container').innerHTML = htmlStr;
+        document.body.className = 'print-presentation';
+        setPageSize('@page { size: A4 landscape; margin: 0; }');
+        setTimeout(() => { window.print(); }, 100);
+    }
+
+    // ==========================================
+    // Multi-View Compare Tool V1.6 (Auto-Save & Backup)
+    // ==========================================
+    let cmpViews = []; 
+
+    function openCompareTool() {
+        if(cmpViews.length === 0) { addNewCompareView(); } 
+        else { renderCompareViews(); }
+        const modal = new bootstrap.Modal(document.getElementById('compareModal'));
+        modal.show();
+    }
+
+    // ฟังก์ชันเซฟ Compare ลง LocalForage
+    async function saveCompareLocal() {
+        await localforage.setItem('compare_data', cmpViews);
+        await localforage.setItem('compare_title', document.getElementById('cmpMainTitle').value);
+    }
+
+    // ฟังก์ชันเซฟ Backup เป็นไฟล์ JSON
+    function backupCompare() {
+        const title = document.getElementById('cmpMainTitle').value || 'Untitled_Compare';
+        const data = { title: title, views: cmpViews };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `Compare_Backup_${title}_${new Date().toISOString().slice(0,10)}.json`;
+        link.click();
+    }
+
+    // ฟังก์ชันโหลด Backup จากไฟล์ JSON
+    function importCompareData(event) {
+        const file = event.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if(data.views && Array.isArray(data.views)) {
+                    cmpViews = data.views;
+                    document.getElementById('cmpMainTitle').value = data.title || '';
+                    await saveCompareLocal();
+                    renderCompareViews();
+                    alert('โหลดข้อมูล Compare สำเร็จเรียบร้อยแล้ว!');
+                } else { alert('รูปแบบไฟล์ Compare ไม่ถูกต้อง'); }
+            } catch(err) { alert('เกิดข้อผิดพลาดในการอ่านไฟล์'); }
+            event.target.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    function addNewCompareView() {
+        const vId = Date.now();
+        cmpViews.push({
+            id: vId, viewName: 'มุมมองที่ ' + (cmpViews.length + 1), nameA: 'Part A (Before)', nameB: 'Part B (After)',
+            imgA: '', imgB: '', markersA: [], markersB: [], diff: ''
+        });
+        saveCompareLocal();
+        renderCompareViews();
+    }
+
+    function removeCompareView(viewId) {
+        if(confirm('ลบมุมมองเปรียบเทียบนี้?')) {
+            cmpViews = cmpViews.filter(v => v.id !== viewId);
+            saveCompareLocal();
+            renderCompareViews();
+        }
+    }
+
+    function clearAllCompareViews() {
+        if(confirm('ยืนยันการล้างข้อมูลเปรียบเทียบ (Compare) ทั้งหมด?')) {
+            cmpViews = [];
+            document.getElementById('cmpMainTitle').value = '';
+            addNewCompareView();
+        }
+    }
+
+    function updateCmpField(viewId, field, val) {
+        const view = cmpViews.find(v => v.id === viewId);
+        if(view) { view[field] = val; saveCompareLocal(); }
+    }
+
+    function loadCmpImageObj(input, viewId, part) {
+        if(input.files && input.files[0]) {
+            const rd = new FileReader();
+            rd.onload = function(e) {
+                const view = cmpViews.find(v => v.id === viewId);
+                if(part === 'A') { view.imgA = e.target.result; view.markersA = []; } 
+                else { view.imgB = e.target.result; view.markersB = []; }
+                saveCompareLocal();
+                renderCompareViews();
+            }
+            rd.readAsDataURL(input.files[0]);
+        }
+    }
+
+    function clearCmpImageObj(viewId, part) {
+        const view = cmpViews.find(v => v.id === viewId);
+        if(part === 'A') { view.imgA = ''; view.markersA = []; } 
+        else { view.imgB = ''; view.markersB = []; }
+        saveCompareLocal();
+        renderCompareViews();
+    }
+
+    function addMarkerObj(e, viewId, part) {
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        const view = cmpViews.find(v => v.id === viewId);
+        const markerArr = part === 'A' ? view.markersA : view.markersB;
+        markerArr.push({ x: x, y: y, text: '' });
+        saveCompareLocal();
+        renderCompareViews();
+    }
+
+    function updateMarkerTextObj(viewId, part, index, val) {
+        const view = cmpViews.find(v => v.id === viewId);
+        const markerArr = part === 'A' ? view.markersA : view.markersB;
+        markerArr[index].text = val;
+        saveCompareLocal();
+    }
+
+    function removeMarkerObj(e, viewId, part, index) {
+        e.stopPropagation(); 
+        const view = cmpViews.find(v => v.id === viewId);
+        const markerArr = part === 'A' ? view.markersA : view.markersB;
+        markerArr.splice(index, 1);
+        saveCompareLocal();
+        renderCompareViews();
+    }
+
+    function renderCompareViews() {
+        const container = document.getElementById('compareViewsContainer');
+        let html = '';
+        
+        cmpViews.forEach((v, vIndex) => {
+            let pinsA = ''; let descA = '';
+            v.markersA.forEach((m, i) => {
+                pinsA += `<div class="marker-pin marker-pin-a" style="left:${m.x}%; top:${m.y}%;" title="คลิกเพื่อลบหมุด" onclick="removeMarkerObj(event, ${v.id}, 'A', ${i})">${i+1}</div>`;
+                descA += `
+                    <div class="input-group input-group-sm mb-1">
+                        <span class="input-group-text bg-dark text-white fw-bold">${i+1}</span>
+                        <input type="text" class="form-control" value="${m.text}" placeholder="อธิบายจุดที่ ${i+1}..." oninput="updateMarkerTextObj(${v.id}, 'A', ${i}, this.value)">
+                        <button class="btn btn-outline-danger" type="button" onclick="removeMarkerObj(event, ${v.id}, 'A', ${i})"><i class="bi bi-trash"></i></button>
+                    </div>`;
+            });
+
+            let pinsB = ''; let descB = '';
+            v.markersB.forEach((m, i) => {
+                pinsB += `<div class="marker-pin marker-pin-b" style="left:${m.x}%; top:${m.y}%;" title="คลิกเพื่อลบหมุด" onclick="removeMarkerObj(event, ${v.id}, 'B', ${i})">${i+1}</div>`;
+                descB += `
+                    <div class="input-group input-group-sm mb-1">
+                        <span class="input-group-text bg-dark text-white fw-bold">${i+1}</span>
+                        <input type="text" class="form-control" value="${m.text}" placeholder="อธิบายจุดที่ ${i+1}..." oninput="updateMarkerTextObj(${v.id}, 'B', ${i}, this.value)">
+                        <button class="btn btn-outline-danger" type="button" onclick="removeMarkerObj(event, ${v.id}, 'B', ${i})"><i class="bi bi-trash"></i></button>
+                    </div>`;
+            });
+
+            html += `
+            <div class="card p-3 mb-4 shadow-sm border-primary">
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <input type="text" class="form-control form-control-sm fw-bold text-primary w-50" value="${v.viewName}" oninput="updateCmpField(${v.id}, 'viewName', this.value)" placeholder="ชื่อมุมมอง เช่น Isometric View">
+                    ${cmpViews.length > 1 ? `<button class="btn btn-sm btn-danger" onclick="removeCompareView(${v.id})"><i class="bi bi-trash"></i> ลบมุมมองนี้</button>` : ''}
+                </div>
+                
+                <div class="row">
+                    <!-- Part A -->
+                    <div class="col-md-6 border-end">
+                        <input type="text" class="form-control form-control-sm mb-2 text-center fw-bold text-secondary" value="${v.nameA}" oninput="updateCmpField(${v.id}, 'nameA', this.value)" placeholder="ชื่อชิ้นงาน A">
+                        ${!v.imgA ? `<input type="file" class="form-control form-control-sm mb-2" accept="image/*" onchange="loadCmpImageObj(this, ${v.id}, 'A')">` : `<button class="btn btn-sm btn-outline-secondary w-100 mb-2" onclick="clearCmpImageObj(${v.id}, 'A')">เปลี่ยนรูป A</button>`}
+                        
+                        <div class="text-center bg-white border rounded" style="min-height: 200px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                            ${v.imgA ? `
+                            <div class="img-marker-wrapper" onclick="addMarkerObj(event, ${v.id}, 'A')">
+                                <img src="${v.imgA}" style="max-width: 100%; max-height: 300px;">
+                                ${pinsA}
+                            </div>
+                            ` : `<span class="text-muted small">อัปโหลดรูปภาพเพื่อปักหมุด</span>`}
+                        </div>
+                        <div class="mt-2">${descA}</div>
+                    </div>
+                    
+                    <!-- Part B -->
+                    <div class="col-md-6">
+                        <input type="text" class="form-control form-control-sm mb-2 text-center fw-bold text-success" value="${v.nameB}" oninput="updateCmpField(${v.id}, 'nameB', this.value)" placeholder="ชื่อชิ้นงาน B">
+                        ${!v.imgB ? `<input type="file" class="form-control form-control-sm mb-2" accept="image/*" onchange="loadCmpImageObj(this, ${v.id}, 'B')">` : `<button class="btn btn-sm btn-outline-secondary w-100 mb-2" onclick="clearCmpImageObj(${v.id}, 'B')">เปลี่ยนรูป B</button>`}
+                        
+                        <div class="text-center bg-white border rounded" style="min-height: 200px; display:flex; flex-direction:column; align-items:center; justify-content:center;">
+                            ${v.imgB ? `
+                            <div class="img-marker-wrapper" onclick="addMarkerObj(event, ${v.id}, 'B')">
+                                <img src="${v.imgB}" style="max-width: 100%; max-height: 300px;">
+                                ${pinsB}
+                            </div>
+                            ` : `<span class="text-muted small">อัปโหลดรูปภาพเพื่อปักหมุด</span>`}
+                        </div>
+                        <div class="mt-2">${descB}</div>
+                    </div>
+                </div>
+                
+                <div class="mt-3">
+                    <label class="form-label small fw-bold">สรุปความแตกต่าง (ในมุมมองนี้)</label>
+                    <textarea class="form-control form-control-sm" rows="2" placeholder="ระบุเหตุผลการเปลี่ยนแปลง..." oninput="updateCmpField(${v.id}, 'diff', this.value)">${v.diff}</textarea>
+                </div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    }
+
+    function triggerComparePrint() {
+        if(cmpViews.length === 0) { alert("ไม่มีข้อมูลให้สร้าง PDF ครับ"); return; }
+        
+        const mainTitle = document.getElementById('cmpMainTitle').value || 'Design Comparison';
+
+        const modalEl = document.getElementById('compareModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalEl);
+        if(modalInstance) modalInstance.hide();
+
+        let htmlStr = '';
+
+        cmpViews.forEach(v => {
+            let htmlPinsA = ''; let htmlDescA = '';
+            v.markersA.forEach((m, i) => {
+                htmlPinsA += `<div style="position:absolute; left:${m.x}%; top:${m.y}%; width:20px; height:20px; background-color:#e67e22; color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10pt; font-weight:bold; transform:translate(-50%,-50%); box-shadow:0 2px 4px rgba(0,0,0,0.3); border:1px solid #fff;">${i+1}</div>`;
+                htmlDescA += `<div style="font-size: 11pt; text-align: left; margin-bottom: 4px;"><strong>(${i+1})</strong> ${m.text || '-'}</div>`;
+            });
+
+            let htmlPinsB = ''; let htmlDescB = '';
+            v.markersB.forEach((m, i) => {
+                htmlPinsB += `<div style="position:absolute; left:${m.x}%; top:${m.y}%; width:20px; height:20px; background-color:#27ae60; color:white; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10pt; font-weight:bold; transform:translate(-50%,-50%); box-shadow:0 2px 4px rgba(0,0,0,0.3); border:1px solid #fff;">${i+1}</div>`;
+                htmlDescB += `<div style="font-size: 11pt; text-align: left; margin-bottom: 4px;"><strong>(${i+1})</strong> ${m.text || '-'}</div>`;
+            });
+
+            htmlStr += `
+            <div class="present-slide" style="display:flex; flex-direction:column; justify-content: flex-start; padding-top: 60px;">
+                <h2 style="color: #1F4E79; font-size: 28pt; margin-bottom: 10px; text-align:center; font-weight: bold;">
+                    ${mainTitle}
+                </h2>
+                <h4 style="color: #7f8c8d; font-size: 18pt; margin-bottom: 25px; text-align:center; border-bottom: 3px solid #1F4E79; padding-bottom: 10px;">
+                    ${v.viewName}
+                </h4>
+                
+                <div style="display:flex; gap: 30px; margin-bottom: 20px; flex: 1;">
+                    <!-- Part A -->
+                    <div style="flex: 1; text-align: center; border: 2px dashed #bdc3c7; padding: 15px; border-radius: 8px; background: white; display:flex; flex-direction:column;">
+                        <h4 style="color: #e67e22; font-size: 18pt; margin-bottom: 15px;">${v.nameA}</h4>
+                        <div style="flex:1;">
+                            ${v.imgA ? `
+                                <div style="position:relative; display:inline-block;">
+                                    <img src="${v.imgA}" style="max-width: 100%; max-height: 250px; object-fit: contain;">
+                                    ${htmlPinsA}
+                                </div>
+                                <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">${htmlDescA}</div>
+                            ` : '<div style="color:#aaa; margin-top:50px;">No Image A</div>'}
+                        </div>
+                    </div>
+                    
+                    <!-- Part B -->
+                    <div style="flex: 1; text-align: center; border: 2px dashed #27ae60; padding: 15px; border-radius: 8px; background: white; display:flex; flex-direction:column;">
+                        <h4 style="color: #27ae60; font-size: 18pt; margin-bottom: 15px;">${v.nameB}</h4>
+                        <div style="flex:1;">
+                            ${v.imgB ? `
+                                <div style="position:relative; display:inline-block;">
+                                    <img src="${v.imgB}" style="max-width: 100%; max-height: 250px; object-fit: contain;">
+                                    ${htmlPinsB}
+                                </div>
+                                <div style="margin-top: 15px; border-top: 1px solid #eee; padding-top: 10px;">${htmlDescB}</div>
+                            ` : '<div style="color:#aaa; margin-top:50px;">No Image B</div>'}
+                        </div>
+                    </div>
+                </div>
+                
+                ${v.diff.trim() !== '' ? `
+                <div style="background: #f8f9fa; border-left: 5px solid #1F4E79; padding: 15px; border-radius: 4px;">
+                    <h5 style="color: #1F4E79; font-size: 14pt; margin: 0 0 5px 0;">Differences Details</h5>
+                    <p style="font-size: 13pt; color: #2c3e50; margin: 0; white-space: pre-wrap;">${v.diff}</p>
+                </div>
+                ` : ''}
+            </div>
+            `;
+        });
+
+        document.getElementById('pdf-compare-container').innerHTML = htmlStr;
+        document.body.className = 'print-compare';
+        setPageSize('@page { size: A4 landscape; margin: 0; }');
+        
+        setTimeout(() => { window.print(); }, 300);
+    }
+</script>
+</body>
+</html>
